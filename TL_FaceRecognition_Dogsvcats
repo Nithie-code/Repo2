@@ -1,0 +1,97 @@
+'''
+    Transfer Learning,VGG16 model Face Recognition,
+    Dataset:DogsVsCats
+    Done 20210702
+'''
+
+# imports
+from keras.layers import Input, Lambda, Dense, Flatten
+from keras.models import Model, Sequential
+from keras.applications.vgg16 import VGG16
+from keras.applications.vgg16 import preprocess_input
+from keras.preprocessing import image
+from keras.preprocessing.image import ImageDataGenerator
+import numpy as np
+from glob import glob
+import matplotlib.pyplot as plt
+import tensorflow as tf
+
+from keras.models import load_model
+
+# Size of image in dataset catsVsDogs
+IMAGE_SIZE = [224, 224]
+
+train_data = 'C:/ML/dogsVScats/Images/train'
+valid_path = 'C:/ML/dogsVScats/test1'
+
+# preprocessing layer to the front of VGG/exclude top_layer
+vgg = VGG16(input_shape=IMAGE_SIZE + [3], weights='imagenet', include_top=False)
+
+# Use existing weights don't the model
+for layer in vgg.layers:
+    layer.trainable = False
+
+    # Number of classes
+folders = glob('C:/ML/dogsVScats/train*')
+
+# Add flatten Layer
+x = Flatten()(vgg.output)
+# x = Dense(1000, activation='relu')(x)
+prediction = Dense(len(folders), activation='softmax')(x)
+
+# create a model
+model = Model(inputs=vgg.input, outputs=prediction)
+
+# model's summary
+model.summary()
+
+# Loss function &optimization
+model.compile(
+    loss='categorical_crossentropy',
+    optimizer='adam',
+    metrics=['accuracy']
+)
+
+# data Augmentation
+from keras.preprocessing.image import ImageDataGenerator
+
+train_datagen = ImageDataGenerator(rescale=1. / 255,
+                                   shear_range=0.2,
+                                   zoom_range=0.2,
+                                   horizontal_flip=True)
+
+test_datagen = ImageDataGenerator(rescale=1. / 255)
+
+# Batch size
+
+training_set = train_datagen.flow_from_directory('C:/ML/dogsVScats/train',
+                                                 target_size=(224, 224),
+                                                 batch_size=32,
+                                                 class_mode='categorical')
+
+test_set = test_datagen.flow_from_directory('C:/ML/dogsVScats/test1',
+                                            target_size=(224, 224),
+                                            batch_size=32,
+                                            class_mode='categorical')
+
+# fitting  the model
+r = model.fit(
+    training_set,
+    validation_data=test_set,
+    epochs=10,
+    steps_per_epoch=len(training_set),
+    validation_steps=len(test_set)
+)
+# Plotting  the Losss
+plt.plot(r.history['loss'], label='train loss')
+plt.plot(r.history['val_loss'], label='val loss')
+plt.legend()
+plt.show()
+plt.savefig('LossVal_loss')
+
+# accuracy
+plt.plot(r.history['acc'], label='train acc')
+plt.plot(r.history['val_acc'], label='val acc')
+plt.legend()
+plt.show()
+plt.savefig('AccVal_acc')
