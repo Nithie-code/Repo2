@@ -1,2 +1,2 @@
-CNN   model keras_tuner
-fashion_mnist dataset
+ Transfer Learning,VGG16 model Face Recognition,
+    Dataset:DogsVsCats
