@@ -1,80 +1,71 @@
-import keras, os
-from keras.models import Sequential
-from keras.layers import Dense, Conv2D, MaxPool2D, Flatten
-from keras.preprocessing.image import ImageDataGenerator
+import keras
+import os
 import numpy as np
+import  tensorflow as tf
+from keras.preprocessing.image import ImageDataGenerator
 
-trdata = ImageDataGenerator()
-traindata = trdata.flow_from_directory(directory="C:/ML/dogsVScats/train", target_size=(224, 224))
-tsdata = ImageDataGenerator()
-testdata = tsdata.flow_from_directory(directory="C:/ML/dogsVScats/test1", target_size=(224, 224))
+from keras.applications import VGG16
 
-model = Sequential()
-# BLOCK#1
-model.add(Conv2D(input_shape=(224, 224, 3), filters=64, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(Conv2D(filters=64, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(MaxPool2D(pool_size=(2, 2), strides=(2, 2)))
+conv_base = VGG16(weights='imagenet', include_top=False, input_shape=(150, 150, 3))
+base_dir = "C:/ML/cats_and_dogs_small"
+train_dir = os.path.join(base_dir, 'train')
+validation_dir = os.path.join(base_dir, 'validation')
+test_dir = os.path.join(base_dir, 'test')
+datagen = ImageDataGenerator(rescale=1. / 255)
+batch_size = 20
 
-# BLOCK#2
-model.add(Conv2D(filters=128, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(Conv2D(filters=128, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(MaxPool2D(pool_size=(2, 2), strides=(2, 2)))
-# BLOCK#3
-model.add(Conv2D(filters=256, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(Conv2D(filters=256, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(Conv2D(filters=256, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(MaxPool2D(pool_size=(2, 2), strides=(2, 2)))
-# BLOCK#4
-model.add(Conv2D(filters=512, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(Conv2D(filters=512, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(Conv2D(filters=512, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(MaxPool2D(pool_size=(2, 2), strides=(2, 2)))
-# BLOCK#5
-model.add(Conv2D(filters=512, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(Conv2D(filters=512, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(Conv2D(filters=512, kernel_size=(3, 3), padding="same", activation="relu"))
-model.add(MaxPool2D(pool_size=(2, 2), strides=(2, 2)))
 
-model.add(Flatten())
-model.add(Dense(units=4096, activation="relu"))
-model.add(Dense(units=4096, activation="relu"))
-model.add(Dense(units=2, activation="softmax"))
+def extract_features(directory, sample_count):
+    features = np.zeros(shape=(sample_count, 4, 4, 512))
+    labels = np.zeros(shape=(sample_count))
+    generator = datagen.flow_from_directory(directory, target_size=(150, 150), batch_size=batch_size,
+                                            class_mode='binary')
 
-from keras.optimizers import Adam
+    i = 0
+    for inputs_batch, labels_batch in generator:
+        features_batch = conv_base.predict(inputs_batch)
+        features[i * batch_size: (i + 1) * batch_size] = features_batch
+        labels[i * batch_size: (i + 1) * batch_size] = labels_batch
+        i += 1
+        if i * batch_size >= sample_count:
+            break
 
-opt = Adam(lr=0.001)
-model.compile(optimizer=opt, loss=keras.losses.categorical_crossentropy, metrics=['accuracy'])
+    return features, labels
 
-model.summary()
 
-from keras.callbacks import ModelCheckpoint, EarlyStopping
+train_features, train_labels = extract_features(train_dir, 2000)
+validation_features, validation_labels = extract_features(validation_dir, 1000)
+test_features, test_labels = extract_features(test_dir, 1000)
 
-checkpoint = ModelCheckpoint("vgg16_1", monitor='val_acc', verbose=1, save_best_only=True,
-                             save_weights_only=False, mode='auto', period=1)
-early = EarlyStopping(monitor='val_acc', min_delta=0, patience=20, verbose=1, mode='auto')
-hist = model.fit_generator(steps_per_epoch=100, generator=traindata, validation_data=testdata,
-                           validation_steps=10, epochs=100, callbacks=[checkpoint, early])
+train_features = np.reshape(train_features, (2000, 4 * 4 * 512))
+validation_features = np.reshape(validation_features, (1000, 4 * 4 * 512))
+test_features = np.reshape(test_features, (1000, 4 * 4 * 512))
+
+from keras import models
+from keras import layers
+from keras import optimizers
+model = models.Sequential()
+model.add(layers.Dense(256, activation='relu', input_dim=4 * 4 * 512))
+model.add(layers.Dropout(0.5))
+model.add(layers.Dense(1, activation='sigmoid'))
+model.compile(optimizer=optimizers.RMSprop(lr=2e-5),
+loss='binary_crossentropy',
+metrics=['acc'])
+history = model.fit(train_features, train_labels,epochs=30,batch_size=20,
+                    validation_data=(validation_features,validation_labels))
 import matplotlib.pyplot as plt
-
-plt.plot(hist.history["accuracy"])
-plt.plot(hist.history['val_acc'])
-plt.plot(hist.history['loss'])
-plt.plot(hist.history['val_loss'])
-plt.title("model accuracy")
-plt.ylabel("Accuracy")
-plt.xlabel("Epoch")
-plt.legend(["Accuracy", "Validation Accuracy", "loss", "Validation Loss"])
+acc = history.history['acc']
+val_acc = history.history['val_acc']
+loss = history.history['loss']
+val_loss = history.history['val_loss']
+epochs = range(1, len(acc) + 1)
+plt.plot(epochs, acc, 'bo', label='Training acc')
+plt.plot(epochs, val_acc, 'b', label='Validation acc')
+plt.title('Training and validation accuracy')
+plt.legend()
+plt.figure()
+plt.plot(epochs, loss, 'bo', label='Training loss')
+plt.plot(epochs, val_loss, 'b', label='Validation loss')
+plt.title('Training and validation loss')
+plt.legend()
 plt.show()
-
-from keras.preprocessing import image
-img = image.load_img("image.jpeg",target_size=(224,224))
-img = np.asarray(img)
-plt.imshow(img)
-img = np.expand_dims(img, axis=0)
-from keras.models import load_model
-saved_model = load_model("vgg16_1.h5")
-output = saved_model.predict(img)
-if output[0][0] > output[0][1]:
-    print("cat")
-else:
-    print('dog')
