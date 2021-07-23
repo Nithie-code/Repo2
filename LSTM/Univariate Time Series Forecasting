@@ -1,0 +1,79 @@
+import numpy as np
+import tensorflow
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Flatten
+
+
+# prepare  data
+
+def prepare_data(timeseries_data, n_steps):
+    X, y = [], []
+    for i in range(len(timeseries_data)):
+        # find the end of this pattern
+        end_ix = i + n_steps
+        # Check the beyond  of the sequence
+        if end_ix > len(timeseries_data) - 1:
+            break
+        # gather input and output
+        seq_x, seq_y = timeseries_data[i:end_ix], timeseries_data[end_ix]
+        X.append(seq_x)
+        y.append(seq_y)
+    return np.array(X), np.array(y)
+
+
+# define input Sequence
+timeseries_data = [110, 125, 133, 146, 158, 172, 187, 197, 210]
+# number of features
+n_steps = 3
+X, y = prepare_data(timeseries_data, n_steps)
+print(X), print(y)
+# reshape fro m [samples ,timesteps] into  [samples  ,timesteps,features]
+n_features = 1
+X = X.reshape(X.shape[0], X.shape[1], n_features)
+
+# define model
+model = Sequential()
+model.add(LSTM(50, activation='relu', return_sequences=True, input_shape=(n_steps, n_features)))
+model.add(LSTM(50, activation='relu'))
+model.add(Dense(1))
+model.compile(optimizer='adam', loss='mse')
+# fit model
+model.fit(X, y, epochs=200, verbose=1)
+import numpy as np
+
+# Prediction  for  10   days
+X_input = np.array([170, 180, 190])
+temp_input = list(X_input)
+lst_output = []
+i = 0
+while (i < 10):
+
+    if (len(temp_input) > 3):
+        X_input = np.array(temp_input[1:])
+        print("{} day input{}".format(i, X_input))
+        # Reshape(x_input)
+        X_input = X_input.reshape((1, n_steps, n_features))
+        # print (X_input)
+        yhat = model.predict(X_input, verbose=0)
+        print("{} day  output {}".format(i, yhat))
+        temp_input.append(yhat[0][0])
+        temp_input = temp_input[1:]
+        # print(temp_input)
+        lst_output.append(yhat[0][0])
+        i = i + 1
+    else:
+        X_input.reshape((1, n_steps, n_features))
+        y_hat = model.predict(X_input, verbose=0)
+        temp_input.append(yhat[0][0])
+        lst_output.append(yhat[0][0])
+        i = i + 1
+
+        print(lst_output)
+
+# Visualizing The Output
+import matplotlib.pyplot as plt
+
+day_new = np.arange(1, 10)
+day_pred = np.arange(10, 20)
+plt.plot(day_new, timeseries_data)
+plt.plot(day_pred, lst_output)
