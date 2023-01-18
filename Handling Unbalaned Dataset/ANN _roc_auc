@@ -1,4 +1,6 @@
-import pandas as pd
+ 
+ #imports
+ import pandas as pd
 import matplotlib.pyplot as plt
 
 df = pd.read_csv('D:/Datasets/creditcard.csv')
